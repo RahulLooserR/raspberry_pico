@@ -10,7 +10,7 @@ if len(sys.argv) not in range (2,3):
 if len(sys.argv) == 3:
     serialPort = sys.argv[2]
 else:
-    serialPort = "/dev/esp32_8266_v3"
+    serialPort = "/dev/serial_ch341_uart"
 
 gcodeFile = sys.argv[1]
 
