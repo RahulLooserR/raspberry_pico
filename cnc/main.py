@@ -1,7 +1,12 @@
 from machine import Pin, PWM, UART
-import utime
+import utime, math
 
-MAX = 100
+global num_calibrate
+global do_calibration
+global pen_up
+pen_up = 0
+num_calibrate = 2
+do_calibration = False
 
 class cnc_:
     def __init__(self) -> None:
@@ -13,7 +18,7 @@ class cnc_:
         #SPR = 256 # 256 revolution for 40 mm
         self.servo_is_up = True
         #self.SPR = 256 # approximately 256 steps for 40 mm
-        self.steps_per_mm = 6.0 # for both motor (~ 256/40)
+        self.steps_per_mm = 6.4 # for both motor (~ 256/40) default is 6
         self.x_max = 40 # 40 mm full range
         self.y_max = 40 
         self.current_x = 0
@@ -89,7 +94,7 @@ class cnc_:
     def print_info(self):
         print("This is yet to be implemented")
 
-def delay(delay_=5000): # 4000 previous setting
+def delay(delay_=10000): # 4000 previous setting
     utime.sleep_us(delay_)
 
 class uart_:
@@ -109,63 +114,50 @@ class uart_:
     def any(self):
         return self.uart.any()
 
-def draw_line(x, y, cnc):
-    print(f'1_current x: {cnc.current_x}')
-    print(f'1_current y: {cnc.current_y}')
-    if (x < 0):
-        x = 0
-    if (y < 0):
-        y = 0
+def draw_line(x: float, y: float, cnc: cnc_) -> None:
+    #print(f'1_current x: {cnc.current_x}')
+    #print(f'1_current y: {cnc.current_y}')
+    # if (x < 0):
+    #     x = 0
+    # if (y < 0):
+    #     y = 0
     if (x > cnc.x_max):
         x = cnc.x_max
     if (y > cnc.y_max):
         y = cnc.y_max
 
-    dir_a = 0
-
     # setting direction of motor
     if (cnc.current_x < x):
         cnc.direction_a.value(0)
-        cnc.direction_b.value(0)
-        dir_a = 0
     else:
         cnc.direction_a.value(1)
-        cnc.direction_b.value(1)
-        dir_a = 1
     if (cnc.current_y < y):
         cnc.direction_b.value(1)
     else:
         cnc.direction_b.value(0)
 
-    # dx = abs(x - cnc.current_x)
-    # dy = abs(y - cnc.current_y)
     dx = cnc.steps_per_mm * abs(x - cnc.current_x)
     dy = cnc.steps_per_mm * abs(y - cnc.current_y)
-
-    print(f'dx = {dx}, dy = {dy}')
-    print(f'motor a/x dir: {dir_a}')
+    
     over = 0
 
     if (dx == dy):
-        for i in range(int(dx)):
+        for i in range(round(dx)):
             cnc.single_step(1)
             cnc.single_step(0)
             delay()
 
     elif (dx > dy):
-        print("dx > dy")
-        for i in range(int(dx)):
+        for i in range(math.ceil(dx)):
             cnc.single_step(0)  # x-axis movement
             over += dy
             if (over >= dx):
-                print(f'over: {over}')
                 over -= dx
                 cnc.single_step(1) # y-axis movement
             delay()
     
     else:
-        print("dx < dy")
-        for i in range(int(dy)):
+        for i in range(math.ceil(dy)):
             cnc.single_step(1)  # y-axis movement
             over += dx
             if (over >= dy):
@@ -176,53 +168,43 @@ def draw_line(x, y, cnc):
     # updating position of cnc current x and current y 
     cnc.current_x = x 
     cnc.current_y = y
-    print(f'current x: {cnc.current_x}')
-    print(f'current y: {cnc.current_y}')
 
-    print(f'steps a: {cnc.num_step_a}')
-    print(f'steps b: {cnc.num_step_b}')
+    # only when calibrating
+    if x < 0 and y < 0:
+        cnc.current_x = 0
+        cnc.current_y = 0
 
-
-def process_gcode(cnc, gcode):
-
-     # servo up
-    if "Z5" in gcode:
-        cnc.servo_up()
-        return
-
-    # servo down
-    if "Z-1" in gcode:
-        if "Pen" in gcode:
-            return
-        cnc.servo_down()
-
-    valid_cmd = ["G00", "G01", "G02", "G03"]
-    content = gcode.split(" ")
-
-    if content[0] not in valid_cmd:
-        #print(f'content[0] : {content[0]}')
-        return
-
-    print(gcode, end="")
-   
-    # linera interpolation
-    if "G00" or "G01" in gcode:
-        x = float(content[1].replace('X',''))
-        y = float(content[2].replace('Y',''))
-        print(f'value of x: {x}')
-        print(f'value of y: {y}')
-        
+def calibrate(cnc: cnc_) -> None:
+    print("Calibrating .....")
+    if do_calibration == True:
+        x = cnc.current_x
+        y = cnc.current_y
+        draw_line(-1, -1, cnc)
         draw_line(x, y, cnc)
-            
-    # circular interpolation clockwise
-    if "G02" in gcode:
-        pass
 
-    # circular interpolation counter clockwise
-    if "G03" in gcode:
-        pass
+def process_gcode(cnc: cnc_, gcode: str) -> None:
+    global pen_up
+    content = gcode.split(";")
+    content = content[0].split(" ")    
     
-   
+    # linera interpolation
+    if content[0] == "G01" or content[0] == "G00":
+        if "Z35" in gcode or "Z19" in gcode:
+            cnc.servo_up()
+            pen_up += 1
+            if pen_up % num_calibrate == 0:
+                calibrate(cnc)
+            return
+        if "Z15" in gcode:
+            cnc.servo_down()
+            return
+        if len(content) <= 3:
+            return
+
+        x = float(content[2].replace('X',''))
+        y = float(content[3].replace('Y',''))
+        draw_line(x, y, cnc)
+
 
 if __name__ == "__main__":
     cnc = cnc_()
@@ -234,16 +216,3 @@ if __name__ == "__main__":
             gcode = uart.readline()
             uart.send_ok()
             process_gcode(cnc, gcode)
-            #utime.sleep(1)
-    '''
-    print("Running main")
-    dir = 1
-    while True:
-        cnc.servo_up()
-        print("servo is up")
-        utime.sleep(5)
-        cnc.servo_down()
-        print("servo is down")
-        utime.sleep(5)
-
-    #'''        
