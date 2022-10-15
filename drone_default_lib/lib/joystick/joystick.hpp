@@ -14,6 +14,17 @@ typedef struct adc_value_{
     uint16_t z;
 } adc_value;
 
+/* jostick1 configuration
+   adc0 is used for left-right movement
+   ADC0 -> x-axis (GP26, pin_no: 31)
+
+   adc1 is used for forward-backward movement
+   ADC1 -> y-axis (GP27, pin_no: 32)
+
+   Joystick2 configuration
+   adc2 is used for up-down movement
+   ADC2 -> z-axis (GP28, pin_no: 34)
+ */
 class joystick{
     private:
         uint x = 26; /* select input as 0 */
