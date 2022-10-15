@@ -19,6 +19,7 @@
 #include "pico/bootrom.h" // reset_usb_boot()
 #include <RF24.h>         // RF24 radio object
 #include "pins.h"
+#include "mpu6050_driver.h"
 
 
 #define _1MHZ 1000000

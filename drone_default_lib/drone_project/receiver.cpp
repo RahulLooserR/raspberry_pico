@@ -17,6 +17,10 @@ int main()
   telemetry_payload.latitude = 10.1;
   telemetry_payload.longitude = 20.1;
 
+  MPU_6050 mpu(PICO_DEFAULT_I2C_SDA_PIN, PICO_DEFAULT_I2C_SCL_PIN, 400 * 1000);
+  mpu.set_low_pass_filter(DLPF_CFG);
+  mpu.set_sensitivity(GYRO_FS_SEL);
+  mpu.calibrate();
   // wait here until the CDC ACM (serial port emulation) is connected
 #ifdef SERIAL_COM
   while (!tud_cdc_connected())
@@ -55,6 +59,8 @@ int main()
     if(absolute_time_diff_us(t2, get_absolute_time()) >= 1000000) {
       printf("counter: %d\n", counter);
       printf("current milis: %u\n", control_payload.throttle);
+      mpu.read_calibrated();
+      mpu.print();
       t2 = get_absolute_time();
     }
 
